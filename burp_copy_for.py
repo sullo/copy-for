@@ -198,10 +198,12 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
     def createMenuItems(self, invocation):
         menu_list = []
         for option in self.copy_options:
-            menu_item = JMenuItem(option["name"], actionPerformed=lambda x, opt=option: self.copy_command(invocation, opt))
+            menu_item = JMenuItem(option["name"])
+            menu_item.addActionListener(lambda event, opt=option: self.copy_command(invocation, opt))
             menu_list.append(menu_item)
         for dynamic in self.dynamic_commands:
-            menu_item = JMenuItem(dynamic["label"], actionPerformed=lambda x, dynamic=dynamic: self.copy_dynamic_command(invocation, dynamic))
+            menu_item = JMenuItem(dynamic["label"])
+            menu_item.addActionListener(lambda event, dyn=dynamic: self.copy_dynamic_command(invocation, dyn))
             menu_list.append(menu_item)
         return menu_list
 
@@ -224,6 +226,7 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
         string_selection = StringSelection(command)
         clipboard = Toolkit.getDefaultToolkit().getSystemClipboard()
         clipboard.setContents(string_selection, None)
+        print("Copied: ", string_selection)
 
     # Store settings
     def saveSettings(self):
@@ -343,3 +346,25 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
             if label and command:
                 self.dynamic_commands.append({"label": label, "command": command})
         self.saveSettings()
+        
+    def copy_command(self, invocation, option):
+        http_traffic = invocation.getSelectedMessages()[0]
+        request_info = self._helpers.analyzeRequest(http_traffic)
+        url = request_info.getUrl()
+        headers = request_info.getHeaders()
+        method = request_info.getMethod()
+        body_offset = request_info.getBodyOffset()
+        request_bytes = http_traffic.getRequest()
+        body = None
+        if body_offset < len(request_bytes):
+            body = self._helpers.bytesToString(request_bytes[body_offset:])
+        
+        if option["name"] == "Copy for curl":
+            command = option["formatter"](url, headers, method, body)
+        else:
+            tool_name = option["name"].split(" ")[-1].lower()
+            command = option["formatter"](tool_name, url, headers, method, body)
+
+        string_selection = StringSelection(command)
+        clipboard = Toolkit.getDefaultToolkit().getSystemClipboard()
+        clipboard.setContents(string_selection, None)
