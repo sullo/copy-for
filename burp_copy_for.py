@@ -182,12 +182,7 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
         self.dynamic_command_panel.repaint()
         self.save_dynamic_commands(None)  # Save changes immediately after deletion
 
-    # Save values to persist
-    # def save_flags(self, event):
-    #     for tool, field in self.flag_fields.items():
-    #         self.flag_values[tool] = field.getText()
-    #     self.saveSettings()
-
+    # Store values
     def save_flags(self, event):
         for tool, field in self.flag_fields.items():
             self.flag_values[tool] = field.getText()

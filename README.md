@@ -1,7 +1,7 @@
 # Burp Extension: Copy-For
 
 ## Purpose 
-This Burp extension adds a sub-menu under the "Extensions" menu which allows you to create a command-line to run a particular tool against the the selected HTTP request . The command will then be stored in the clipboard.
+This Burp extension adds a sub-menu under the "Extensions" contextual menu (when you right-click in a request) which allows you to create a command-line to run a particular tool using the the selected HTTP request . The formatted command will then be stored in the clipboard.
 
 Additionally, custom commands can be added via the configuration menu.
 
@@ -20,7 +20,7 @@ The default Copy-For commands are:
 Commands are defined in the configuration panel. Each tool can be customized and saved.
 ![Config Screen](images/config.png)
 
-Variable replacement in the commands works by parsing values from the request and replacing the ones listed below:
+Variable replacement in the commands works by parsing values from the request and replacing with the ones listed below:
 ```
     {baseurl} - Base URL (protocol and domain)
     {body} - Request body (if present)
@@ -31,7 +31,7 @@ Variable replacement in the commands works by parsing values from the request an
     {hostname} - Hostname
     {method} - HTTP method
     {port} - Port number (80 or 443 if not specified)
-    {ua} - The User-Agent (there is a field to set this)
+    {ua} - The User-Agent (there is a field to change this)
 ```
 
 The default tool configs are:
@@ -46,6 +46,6 @@ The default tool configs are:
         "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0"
 ```
 
-Add or change any flags as you like. 
+Change any flags to suit your needs. 
 
-New arbitrary commands can be added using the "Add Command" button in the config panel.
+New commands can be added using the "Add Command" button in the config panel.
