@@ -21,7 +21,7 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
     # Modify defaults here if desired
     default_flag_values = {
         "jwt_tool": "python3 jwt_tool.py -t '{url}' {headers} -M at",
-        "nikto": "nikto.pl -F htm -S . -o . -h '{url}' -p {port}",
+        "nikto": "nikto.pl -F htm -S . -o . -h '{url}'",
         "nmap": "nmap {hostname} -oA {filename} -Pn -p- -sCV",
         "nuclei": "nuclei -u '{baseurl}' -me {directory} -H 'User-Agent: {ua}'",
         "ffuf": "ffuf -u {baseurl}/FUZZ {headers}",
