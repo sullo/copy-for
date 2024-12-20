@@ -36,7 +36,7 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
     def setup_ui(self):
         self.panel = JPanel(GridBagLayout())
         constraints = GridBagConstraints()
-        constraints.insets = Insets(1, 1, 1, 1)  # Minimize padding
+        constraints.insets = Insets(1, 1, 0, 1)  # Minimize padding
         constraints.anchor = GridBagConstraints.WEST
 
         # Explanation text
@@ -52,30 +52,32 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
         {port} - Port number
         {uaff} - FireFox User Agent
         """
+
         explanation_area = JTextArea(explanation_text)
         explanation_area.setEditable(False)
         explanation_area.setLineWrap(True)
         explanation_area.setWrapStyleWord(True)
-        explanation_area.setPreferredSize(Dimension(1000, 300))  # Adjust height here
+        explanation_area.setPreferredSize(Dimension(1000, 220))
 
-        # Add explanation area
         constraints.gridx = 0
         constraints.gridy = 0
         constraints.gridwidth = 2
         constraints.weightx = 1.0
-        constraints.weighty = 0.0  # Prevent vertical expansion
+        constraints.weighty = 0.0
         constraints.fill = GridBagConstraints.HORIZONTAL
+        constraints.insets = Insets(1, 1, 0, 1)  # Top, Left, Bottom, Right
         self.panel.add(explanation_area, constraints)
 
         # Flag fields for each tool
         self.flag_fields = {}
         for i, (tool, flags) in enumerate(sorted(self.flag_values.items())):
-            constraints.gridy = i + 1
+            constraints.gridy = i + 1  # Start immediately after the explanation area
             constraints.gridx = 0
             constraints.gridwidth = 1
             constraints.weightx = 0.0
-            constraints.weighty = 0.0  # No vertical expansion
+            constraints.weighty = 0.0
             constraints.fill = GridBagConstraints.NONE
+            constraints.insets = Insets(1, 1, 1, 1)  # Reset insets for other components
             self.panel.add(JLabel("{} Flags:".format(tool.capitalize())), constraints)
 
             constraints.gridx = 1
