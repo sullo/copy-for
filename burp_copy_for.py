@@ -57,7 +57,7 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
         explanation_area.setEditable(False)
         explanation_area.setLineWrap(True)
         explanation_area.setWrapStyleWord(True)
-        explanation_area.setPreferredSize(Dimension(1000, 220))
+        explanation_area.setPreferredSize(Dimension(1000, 200))
 
         constraints.gridx = 0
         constraints.gridy = 0
@@ -423,23 +423,6 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
             command = option["formatter"](tool_name, url, headers, method, body)
 
         # Copy the command to the clipboard
-        # if command:
         string_selection = StringSelection(command)
         clipboard = Toolkit.getDefaultToolkit().getSystemClipboard()
         clipboard.setContents(string_selection, None)
-        # self._stdout.println("Command copied to clipboard: %s" % command)
-        # else:
-            # self._stdout.println("Failed to generate command.")
-
-class ChangeListener(DocumentListener):
-    def __init__(self, callback):
-        self.callback = callback
-
-    def changedUpdate(self, e):
-        self.callback(None)
-
-    def removeUpdate(self, e):
-        self.callback(None)
-
-    def insertUpdate(self, e):
-        self.callback(None)
