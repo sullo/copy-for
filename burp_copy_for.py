@@ -1,10 +1,13 @@
 # -*- coding: utf-8 -*-
 from burp import IBurpExtender, IContextMenuFactory, ITab, IExtensionStateListener
-from javax.swing import JPanel, JLabel, JTextField, JButton, BoxLayout, JMenuItem, JScrollPane, JTextArea, Box
-from java.awt import Toolkit, GridBagLayout, GridBagConstraints, Insets, Dimension
+from javax.swing import JPanel, JLabel, JTextField, JButton, BoxLayout, JMenuItem, JScrollPane, JEditorPane, JTextArea, Box
+from java.awt import GridBagConstraints, GridBagLayout, Insets, Dimension, Color, BorderLayout, Toolkit
 from java.awt.datatransfer import StringSelection
 from java.io import PrintWriter
 from java.lang import Integer
+from javax.swing.text.html import HTMLEditorKit
+from javax.swing.event import DocumentListener
+from javax.swing.text.html import HTMLEditorKit
 import json
 import re
 
@@ -22,19 +25,109 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
     default_flag_values = {
         "jwt_tool": "python3 jwt_tool.py -t '{url}' {headers} -M at",
         "nikto": "nikto.pl -F htm -S . -o . -h '{url}'",
-        "nmap": "nmap {hostname} -oA {filename} -Pn -p- -sCV",
-        "nuclei": "nuclei -u '{baseurl}' -me {directory} -H 'User-Agent: {ua}'",
-        "ffuf": "ffuf -u {baseurl}/FUZZ {headers}",
-        "curl": "curl -X {method} {headers} '{url}'",
+        "nmap": "nmap {hostname} -oA '{filename}' -Pn -p- -sCV",
+        "nuclei": "nuclei -u '{baseurl}' -me '{directory}' -H 'User-Agent: {ua}'",
+        "ffuf": "ffuf -u '{baseurl}/FUZZ' {headers}",
+        "curl": "curl -X '{method}' {headers} '{url}'",
         "wget": "wget '{url}' {headers}",
         "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0"
     }
+
+    def setup_ui(self):
+        self.panel = JPanel(GridBagLayout())
+        constraints = GridBagConstraints()
+        constraints.insets = Insets(1, 1, 1, 1)  # Minimize padding
+        constraints.anchor = GridBagConstraints.WEST
+
+        # Explanation text
+        explanation_text = """Variable substitution:
+        {baseurl} - Base URL (protocol and domain)
+        {body} - Request body (if present)
+        {directory} - Safe directory name based on base URL
+        {url} - Full URL
+        {filename} - Safe filename based on hostname
+        {headers} - Request headers
+        {hostname} - Hostname
+        {method} - HTTP method
+        {port} - Port number
+        {uaff} - FireFox User Agent
+        """
+        explanation_area = JTextArea(explanation_text)
+        explanation_area.setEditable(False)
+        explanation_area.setLineWrap(True)
+        explanation_area.setWrapStyleWord(True)
+        explanation_area.setPreferredSize(Dimension(1000, 300))  # Adjust height here
+
+        # Add explanation area
+        constraints.gridx = 0
+        constraints.gridy = 0
+        constraints.gridwidth = 2
+        constraints.weightx = 1.0
+        constraints.weighty = 0.0  # Prevent vertical expansion
+        constraints.fill = GridBagConstraints.HORIZONTAL
+        self.panel.add(explanation_area, constraints)
+
+        # Flag fields for each tool
+        self.flag_fields = {}
+        for i, (tool, flags) in enumerate(sorted(self.flag_values.items())):
+            constraints.gridy = i + 1
+            constraints.gridx = 0
+            constraints.gridwidth = 1
+            constraints.weightx = 0.0
+            constraints.weighty = 0.0  # No vertical expansion
+            constraints.fill = GridBagConstraints.NONE
+            self.panel.add(JLabel("{} Flags:".format(tool.capitalize())), constraints)
+
+            constraints.gridx = 1
+            constraints.weightx = 1.0
+            constraints.fill = GridBagConstraints.HORIZONTAL
+            field = JTextField(flags, 20)
+            field.setPreferredSize(Dimension(250, 20))
+            self.flag_fields[tool] = field
+            self.panel.add(field, constraints)
+
+        # Dynamic command panel
+        self.dynamic_command_panel = JPanel()
+        self.dynamic_command_panel.setLayout(BoxLayout(self.dynamic_command_panel, BoxLayout.Y_AXIS))
+        self.dynamic_fields = []
+
+        # Add 'Add Command' button
+        add_command_button = JButton("Add Command", actionPerformed=self.add_dynamic_command)
+        constraints.gridy += 1
+        constraints.gridx = 0
+        constraints.gridwidth = 2
+        constraints.weightx = 0.0
+        constraints.fill = GridBagConstraints.NONE
+        self.panel.add(add_command_button, constraints)
+
+        # Add 'Save' button
+        save_button = JButton("Save", actionPerformed=self.save_flags)
+        constraints.gridy += 1
+        constraints.gridx = 0
+        constraints.gridwidth = 2
+        constraints.weightx = 0.0
+        constraints.fill = GridBagConstraints.NONE
+        self.panel.add(save_button, constraints)
+
+        # Add dynamic command scroll pane
+        constraints.gridy += 1  # Move below all flag fields
+        constraints.gridx = 0
+        constraints.gridwidth = 2  # Span across both columns
+        constraints.weightx = 1.0
+        constraints.weighty = 1.0  # Allow this component to take remaining vertical space
+        constraints.fill = GridBagConstraints.BOTH
+        self.panel.add(JScrollPane(self.dynamic_command_panel), constraints)
+
+        # Add scroll pane to main panel
+        self.scroll_pane = JScrollPane(self.panel)
+        self.panel.revalidate()
+        self.panel.repaint()
 
     def registerExtenderCallbacks(self, callbacks):
         self._callbacks = callbacks
         self._helpers = callbacks.getHelpers()
         self._stdout = PrintWriter(callbacks.getStdout(), True)
-        callbacks.setExtensionName("Copy For")
+        callbacks.setExtensionName("Copy For...")
         callbacks.registerExtensionStateListener(self)
         self.flag_values = self.default_flag_values.copy()
         self.dynamic_commands = []
@@ -52,127 +145,6 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
             {"name": "Copy for wget", "formatter": self.format}
         ], key=lambda x: x["name"])
 
-    def setup_ui(self):
-        self.panel = JPanel(GridBagLayout())
-        constraints = GridBagConstraints()
-        constraints.fill = GridBagConstraints.HORIZONTAL
-        constraints.insets = Insets(5, 5, 5, 5)
-        constraints.anchor = GridBagConstraints.WEST
-
-        explanation_text = """
-        Variable substitution:
-        {baseurl} - Base URL (protocol and domain)
-        {body} - Request body (if present)
-        {directory} - Safe directory name based on base URL
-        {url} - Full URL
-        {filename} - Safe filename based on hostname
-        {headers} - Request headers
-        {hostname} - Hostname
-        {method} - HTTP method
-        {port} - Port number
-        {ua} - FireFox User Agent
-        """
-
-        explanation_area = JTextArea(explanation_text)
-        explanation_area.setEditable(False)
-        explanation_area.setLineWrap(True)
-        explanation_area.setWrapStyleWord(True)
-        explanation_area.setPreferredSize(Dimension(350, 220))
-        constraints.gridx = 0
-        constraints.gridy = 0
-        constraints.gridwidth = 2
-        constraints.weightx = 1.0
-        self.panel.add(explanation_area, constraints)
-
-        constraints.gridwidth = 1
-        self.flag_fields = {}
-        for i, (tool, flags) in enumerate(sorted(self.flag_values.items())):
-            constraints.gridy = i + 1
-            constraints.gridx = 0
-            constraints.weightx = 0.0
-            constraints.fill = GridBagConstraints.NONE
-            if tool == "ua":
-                self.panel.add(JLabel("{} UA:".format(tool.capitalize())), constraints)
-            else:
-                self.panel.add(JLabel("{} Flags:".format(tool.capitalize())), constraints)
-
-            constraints.gridx = 1
-            constraints.weightx = 1.0
-            constraints.fill = GridBagConstraints.HORIZONTAL
-            field = JTextField(flags, 20)
-            field.setMinimumSize(Dimension(200, field.getPreferredSize().height))
-            self.flag_fields[tool] = field
-            self.panel.add(field, constraints)
-
-        # Use BoxLayout for dynamic command panel to stack vertically
-        self.dynamic_command_panel = JPanel()
-        self.dynamic_command_panel.setLayout(BoxLayout(self.dynamic_command_panel, BoxLayout.Y_AXIS))
-        self.dynamic_fields = []
-
-        add_command_button = JButton("Add Command", actionPerformed=self.add_dynamic_command)
-        constraints.gridy += 1
-        constraints.gridx = 0
-        constraints.gridwidth = 2
-        self.panel.add(add_command_button, constraints)
-
-        constraints.gridy += 1
-        constraints.weightx = 1.0
-        constraints.weighty = 1.0
-        constraints.fill = GridBagConstraints.BOTH
-        constraints.gridwidth = 2
-        self.panel.add(JScrollPane(self.dynamic_command_panel), constraints)
-
-        self.scroll_pane = JScrollPane(self.panel)
-
-        # Save button
-        save_button = JButton("Save", actionPerformed=self.save_flags)
-        save_button.setMaximumSize(Dimension(100, save_button.getPreferredSize().height))
-        constraints.gridy += 1
-        constraints.gridx = 0
-        constraints.gridwidth = 1
-        constraints.weightx = 0.0
-        constraints.fill = GridBagConstraints.NONE
-        constraints.anchor = GridBagConstraints.WEST
-        self.panel.add(save_button, constraints)
-
-    # Handler for adding arbitrary menu items
-    def add_dynamic_command(self, event=None):
-        row = JPanel(GridBagLayout())
-        constraints = GridBagConstraints()
-        constraints.fill = GridBagConstraints.HORIZONTAL
-        constraints.insets = Insets(2, 2, 2, 2)
-        constraints.anchor = GridBagConstraints.WEST
-
-        label_field = JTextField("", 10)
-        command_field = JTextField("", 20)
-        delete_button = JButton("Delete", actionPerformed=lambda evt, row=row: self.remove_dynamic_command(row))
-
-        constraints.gridx = 0
-        constraints.weightx = 0.0
-        row.add(JLabel("Label:"), constraints)
-
-        constraints.gridx = 1
-        constraints.weightx = 0.3
-        row.add(label_field, constraints)
-
-        constraints.gridx = 2
-        constraints.weightx = 0.0
-        row.add(JLabel("Command:"), constraints)
-
-        constraints.gridx = 3
-        constraints.weightx = 0.7
-        row.add(command_field, constraints)
-
-        constraints.gridx = 4
-        constraints.weightx = 0.0
-        row.add(delete_button, constraints)
-
-        self.dynamic_command_panel.add(row, 0)  # Add at index 0
-        row.setMaximumSize(Dimension(Integer.MAX_VALUE, 35))
-        self.dynamic_fields.insert(0, (label_field, command_field))  # Insert at the beginning of the list
-        self.dynamic_command_panel.revalidate()
-        self.dynamic_command_panel.repaint()
-
     # Hanmdler to remove arbitrary menu items
     def remove_dynamic_command(self, row):
         self.dynamic_command_panel.remove(row)
@@ -188,6 +160,7 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
             self.flag_values[tool] = field.getText()
         self.saveSettings()
         self.save_dynamic_commands(event)
+        self.changes_made = False
 
     # Populate the menu
     def createMenuItems(self, invocation):
@@ -200,11 +173,16 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
             menu_item = JMenuItem(dynamic["label"])
             menu_item.addActionListener(lambda event, dyn=dynamic: self.copy_dynamic_command(invocation, dyn))
             menu_list.append(menu_item)
-        return menu_list
+        return menu_list if menu_list else None
 
     # Copy to clipboard
     def copy_dynamic_command(self, invocation, dynamic):
-        http_traffic = invocation.getSelectedMessages()[0]
+        # Get the selected HTTP request
+        selected_messages = invocation.getSelectedMessages()
+        if not selected_messages or len(selected_messages) == 0:
+            return
+
+        http_traffic = selected_messages[0]
         request_info = self._helpers.analyzeRequest(http_traffic)
         url = request_info.getUrl()
         headers = request_info.getHeaders()
@@ -215,13 +193,87 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
         if body_offset < len(request_bytes):
             body = self._helpers.bytesToString(request_bytes[body_offset:])
 
+        # Generate the command dynamically
         variables = self.get_common_variables(url, headers, method, body)
         command = self.format_command(dynamic["command"], variables)
 
+        # Copy the command to the clipboard
         string_selection = StringSelection(command)
         clipboard = Toolkit.getDefaultToolkit().getSystemClipboard()
         clipboard.setContents(string_selection, None)
-        print("Copied: ", string_selection)
+        if not selected_messages or len(selected_messages) == 0:
+            self._stdout.println("Error: No HTTP messages selected.")
+            return
+        else:
+            self._stdout.println("Failed to generate dynamic command.")
+
+    def add_dynamic_command(self, event=None):
+        row = JPanel(GridBagLayout())
+        constraints = GridBagConstraints()
+        constraints.fill = GridBagConstraints.HORIZONTAL
+        constraints.insets = Insets(2, 2, 2, 2)  # Minimal padding
+        constraints.anchor = GridBagConstraints.WEST
+
+        # Label field
+        label_field = JTextField("", 10)
+        label_field.setPreferredSize(Dimension(125, 25))  # Shrink label field
+
+        # Command field
+        command_field = JTextField("", 20)
+        command_field.setPreferredSize(Dimension(150, 25))  # Shrink command field
+        command_field.setMinimumSize(Dimension(150, 25))  # Enforce minimum size
+        command_field.setMaximumSize(Dimension(150, 25))  # Enforce maximum size
+
+        # Delete button
+        delete_button = JButton("Delete", actionPerformed=lambda evt, row=row: self.remove_dynamic_command(row))
+
+        # Add "Label:" text
+        constraints.gridx = 0
+        constraints.weightx = 0.0
+        constraints.fill = GridBagConstraints.NONE  # No stretching
+        row.add(JLabel("Label:"), constraints)
+
+        # Add label field
+        constraints.gridx = 1
+        constraints.weightx = 0.3  # Allocate minimal space for the label field
+        constraints.fill = GridBagConstraints.HORIZONTAL
+        constraints.anchor = GridBagConstraints.WEST  # Align field to the left
+        row.add(label_field, constraints)
+
+        # Add "Command:" text
+        constraints.gridx = 2
+        constraints.weightx = 0.0
+        constraints.fill = GridBagConstraints.NONE
+        row.add(JLabel("Command:"), constraints)
+
+        # Add command field
+        constraints.gridx = 3
+        constraints.weightx = 0.5  # Reduced space allocation
+        constraints.fill = GridBagConstraints.HORIZONTAL
+        row.add(command_field, constraints)
+
+        # Add delete button
+        constraints.gridx = 4
+        constraints.weightx = 0.0
+        constraints.fill = GridBagConstraints.NONE
+        row.add(delete_button, constraints)
+
+        # Add row to the dynamic command panel
+        self.dynamic_command_panel.add(row, 0)  # Add at index 0
+        row.setMaximumSize(Dimension(Integer.MAX_VALUE, 35))
+        self.dynamic_fields.insert(0, (label_field, command_field))  # Insert at the beginning of the list
+        self.dynamic_command_panel.revalidate()
+        self.dynamic_command_panel.repaint()
+
+    def remove_dynamic_command(self, row):
+        self.dynamic_command_panel.remove(row)
+        self.dynamic_fields = [
+            (label, command)
+            for label, command in self.dynamic_fields
+            if label not in row.getComponents() and command not in row.getComponents()
+        ]
+        self.dynamic_command_panel.revalidate()
+        self.dynamic_command_panel.repaint()
 
     # Store settings
     def saveSettings(self):
@@ -311,7 +363,8 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
 
     def get_path_safe_name(self, host):
         safe_name = re.sub(r'[^a-zA-Z0-9_\.\-]', '_', host)
-        safe_name = safe_name.strip('.-')
+        safe_name = re.sub(r'___', '_', safe_name)
+        safe_name = safe_name.strip('.- ')
         return safe_name
 
     def escape(self, s):
@@ -341,9 +394,15 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
             if label and command:
                 self.dynamic_commands.append({"label": label, "command": command})
         self.saveSettings()
-        
+    
     def copy_command(self, invocation, option):
-        http_traffic = invocation.getSelectedMessages()[0]
+        # Get the selected HTTP request
+        selected_messages = invocation.getSelectedMessages()
+        if not selected_messages or len(selected_messages) == 0:
+            self._stdout.println("Error: No HTTP messages selected.")
+            return
+
+        http_traffic = selected_messages[0]
         request_info = self._helpers.analyzeRequest(http_traffic)
         url = request_info.getUrl()
         headers = request_info.getHeaders()
@@ -353,13 +412,32 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
         body = None
         if body_offset < len(request_bytes):
             body = self._helpers.bytesToString(request_bytes[body_offset:])
-        
+
+        # Generate the command using the specified formatter
         if option["name"] == "Copy for curl":
             command = option["formatter"](url, headers, method, body)
         else:
             tool_name = option["name"].split(" ")[-1].lower()
             command = option["formatter"](tool_name, url, headers, method, body)
 
+        # Copy the command to the clipboard
+        # if command:
         string_selection = StringSelection(command)
         clipboard = Toolkit.getDefaultToolkit().getSystemClipboard()
         clipboard.setContents(string_selection, None)
+        # self._stdout.println("Command copied to clipboard: %s" % command)
+        # else:
+            # self._stdout.println("Failed to generate command.")
+
+class ChangeListener(DocumentListener):
+    def __init__(self, callback):
+        self.callback = callback
+
+    def changedUpdate(self, e):
+        self.callback(None)
+
+    def removeUpdate(self, e):
+        self.callback(None)
+
+    def insertUpdate(self, e):
+        self.callback(None)
