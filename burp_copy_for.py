@@ -418,6 +418,8 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
         # Generate the command using the specified formatter
         if option["name"] == "Copy for curl":
             command = option["formatter"](url, headers, method, body)
+        elif option["name"] == "Copy for jwt_tool.py":
+            command = option["formatter"](url, headers, method, body)
         else:
             tool_name = option["name"].split(" ")[-1].lower()
             command = option["formatter"](tool_name, url, headers, method, body)
