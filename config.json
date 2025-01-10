@@ -1,0 +1,18 @@
+{
+  "custom": [
+    {
+      "label": "",
+      "command": ""
+    }
+  ],
+  "defaults": {
+    "nuclei": "nuclei -u '{baseurl}' -me '{directory}' -H 'User-Agent: {ua}'",
+    "curl": "curl -X '{method}' {headers} '{url}'",
+    "wget": "wget '{url}' {headers}",
+    "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0",
+    "nikto": "nikto.pl -F htm -S . -o . -h '{url}'",
+    "jwt_tool": "python3 jwt_tool.py -t '{url}' {headers} -M at",
+    "nmap": "nmap {hostname} -oA '{filename}' -Pn -p- -sCV",
+    "ffuf": "ffuf -u '{baseurl}/FUZZ' {headers}"
+  }
+}

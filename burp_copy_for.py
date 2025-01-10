@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from burp import IBurpExtender, IContextMenuFactory, ITab, IExtensionStateListener
-from javax.swing import JPanel, JLabel, JTextField, JButton, BoxLayout, JMenuItem, JScrollPane, JEditorPane, JTextArea, Box
+from javax.swing import JSeparator, JPanel, JLabel, JTextField, JButton, BoxLayout, JMenuItem, JScrollPane, JEditorPane, JTextArea, Box, JFileChooser
 from java.awt import GridBagConstraints, GridBagLayout, Insets, Dimension, Color, BorderLayout, Toolkit
 from java.awt.datatransfer import StringSelection
 from java.io import PrintWriter
@@ -93,23 +93,64 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
         self.dynamic_command_panel.setLayout(BoxLayout(self.dynamic_command_panel, BoxLayout.Y_AXIS))
         self.dynamic_fields = []
 
-        # Add 'Add Command' button
-        add_command_button = JButton("Add Command", actionPerformed=self.add_dynamic_command)
+        # Add "Custom Commands:" label
+        custom_commands_label = JLabel("Save:")
         constraints.gridy += 1
         constraints.gridx = 0
         constraints.gridwidth = 2
         constraints.weightx = 0.0
         constraints.fill = GridBagConstraints.NONE
-        self.panel.add(add_command_button, constraints)
+        self.panel.add(custom_commands_label, constraints)
 
         # Add 'Save' button
-        save_button = JButton("Save", actionPerformed=self.save_flags)
+        save_button = JButton("Save (in Burp project)", actionPerformed=self.save_flags)
         constraints.gridy += 1
         constraints.gridx = 0
         constraints.gridwidth = 2
         constraints.weightx = 0.0
         constraints.fill = GridBagConstraints.NONE
         self.panel.add(save_button, constraints)
+            
+        # Load Config button
+        load_config_button = JButton("Load Config File", actionPerformed=self.load_config)
+        constraints.gridy += 1
+        constraints.gridx = 0
+        constraints.gridwidth = 1
+        constraints.weightx = 0.0
+        constraints.fill = GridBagConstraints.NONE
+        self.panel.add(load_config_button, constraints)
+
+        # Save Config button
+        save_config_button = JButton("Save Config File", actionPerformed=self.save_config)
+        constraints.gridx = 1
+        self.panel.add(save_config_button, constraints)
+
+        # Add a horizontal separator
+        separator = JSeparator()
+        constraints.gridy += 1
+        constraints.gridx = 0
+        constraints.gridwidth = 2  # Make the separator span across both columns
+        constraints.weightx = 1.0
+        constraints.fill = GridBagConstraints.HORIZONTAL
+        self.panel.add(separator, constraints)
+
+        # Add "Custom Commands:" label
+        custom_commands_label = JLabel("Custom Commands:")
+        constraints.gridy += 1
+        constraints.gridx = 0
+        constraints.gridwidth = 2
+        constraints.weightx = 0.0
+        constraints.fill = GridBagConstraints.NONE
+        self.panel.add(custom_commands_label, constraints)
+
+        # Add 'Add Command' button
+        add_command_button = JButton("Add Custom Command", actionPerformed=self.add_dynamic_command)
+        constraints.gridy += 1
+        constraints.gridx = 0
+        constraints.gridwidth = 2
+        constraints.weightx = 0.0
+        constraints.fill = GridBagConstraints.NONE
+        self.panel.add(add_command_button, constraints)
 
         # Add dynamic command scroll pane
         constraints.gridy += 1  # Move below all flag fields
@@ -428,3 +469,91 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
         string_selection = StringSelection(command)
         clipboard = Toolkit.getDefaultToolkit().getSystemClipboard()
         clipboard.setContents(string_selection, None)
+
+    def getTabCaption(self):
+        return "Copy For"
+
+    def getUiComponent(self):
+        return self.scroll_pane
+
+    def load_config(self, event):
+        file_chooser = JFileChooser()
+        result = file_chooser.showOpenDialog(self.panel)
+        if result == JFileChooser.APPROVE_OPTION:
+            selected_file = file_chooser.getSelectedFile()
+            try:
+                with open(selected_file.getAbsolutePath(), 'r') as config_file:
+                    config = json.load(config_file)
+                    # Load default flag values
+                    defaults = config.get('defaults', {})
+                    for tool, value in defaults.items():
+                        if tool in self.flag_values:
+                            self.flag_values[tool] = value
+                            if tool in self.flag_fields:
+                                self.flag_fields[tool].setText(value)
+                    
+                    # Load custom dynamic commands
+                    self.dynamic_commands = config.get('custom', [])
+                    self.redraw_ui()
+            except Exception as e:
+                self._stdout.println("Error loading configuration: {}".format(str(e)))
+
+    def save_config(self, event):
+        file_chooser = JFileChooser()
+        result = file_chooser.showSaveDialog(self.panel)
+        if result == JFileChooser.APPROVE_OPTION:
+            selected_file = file_chooser.getSelectedFile()
+            try:
+                # Print file path
+                self._stdout.println("Saving configuration to: {}".format(selected_file.getAbsolutePath()))
+
+                # Gather updated defaults from UI fields
+                updated_defaults = {}
+                for tool, field in self.flag_fields.items():
+                    updated_value = field.getText().strip()
+                    updated_defaults[tool] = updated_value
+                    self._stdout.println("Updated default for {}: {}".format(tool, updated_value))
+
+                # Gather dynamic commands
+                dynamic_commands = []
+                for field in self.dynamic_fields:
+                    label = field[0].getText().strip()
+                    command = field[1].getText().strip()
+                    if label and command:
+                        dynamic_commands.append({"label": label, "command": command})
+                        self._stdout.println("Dynamic command added - Label: {}, Command: {}".format(label, command))
+                    else:
+                        self._stdout.println("Skipping empty or incomplete dynamic command field.")
+
+                # Prepare the final configuration
+                config = {
+                    'defaults': updated_defaults,
+                    'custom': dynamic_commands
+                }
+                self._stdout.println("Final configuration data:")
+                self._stdout.println(json.dumps(config, indent=2))
+
+                # Write to file
+                with open(selected_file.getAbsolutePath(), 'w') as config_file:
+                    json.dump(config, config_file, indent=2)
+
+                self._stdout.println("Configuration saved successfully.")
+            except Exception as e:
+                self._stdout.println("Error saving configuration: {}".format(str(e)))
+
+
+    def redraw_ui(self):
+        # Update flag fields
+        for tool, field in self.flag_fields.items():
+            field.setText(self.flag_values.get(tool, ''))
+
+        # Update dynamic commands
+        self.dynamic_command_panel.removeAll()
+        self.dynamic_fields = []
+        for dynamic in self.dynamic_commands:
+            self.add_dynamic_command()
+            self.dynamic_fields[-1][0].setText(dynamic["label"])
+            self.dynamic_fields[-1][1].setText(dynamic["command"])
+
+        self.dynamic_command_panel.revalidate()
+        self.dynamic_command_panel.repaint()
