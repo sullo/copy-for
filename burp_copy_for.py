@@ -112,7 +112,7 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
         self.panel.add(save_button, constraints)
             
         # Load Config button
-        load_config_button = JButton("Load Config File", actionPerformed=self.load_config)
+        load_config_button = JButton("    Load Config File    ", actionPerformed=self.load_config)
         constraints.gridy += 1
         constraints.gridx = 0
         constraints.gridwidth = 1
