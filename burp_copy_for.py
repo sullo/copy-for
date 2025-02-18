@@ -8,6 +8,7 @@ from java.lang import Integer
 from javax.swing.text.html import HTMLEditorKit
 from javax.swing.event import DocumentListener
 from javax.swing.text.html import HTMLEditorKit
+from urlparse import urlparse, urlsplit, urlunsplit
 import json
 import re
 
@@ -414,20 +415,22 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
         return s.replace("'", "\\'")
 
     def get_baseurl(self, url):
-        return re.match(r'(https?://(?:[^:@]+(?::[^@]+)?@)?[^:/]+)', str(url)).group(1)
+        parsed = urlsplit(str(url))
+        return urlunsplit((parsed.scheme, parsed.netloc, '', '', ''))
 
     def get_hostname(self, url):
-        return re.match(r'https?://(?:[^:@]+(?::[^@]+)?@)?([^/:]+)', str(url)).group(1)
+        parsed_url = urlparse(str(url))
+        return parsed_url.hostname 
 
     def extensionUnloaded(self):
         self.saveSettings()
 
     def get_port(self, url):
-        match = re.match(r'https?://(?:[^:@]+(?::[^@]+)?@)?([^:/]+)(?::(\d+))?', str(url))
-        if match:
-            return match.group(2) if match.group(2) else ("443" if url.startswith("https") else "80")
-        return "80"
-    
+        parsed_url = urlparse(str(url))
+        if parsed_url.port:
+            return str(parsed_url.port)
+        return "443" if parsed_url.scheme == "https" else "80"
+
     # Save custom items
     def save_dynamic_commands(self, event):
         self.dynamic_commands = []
