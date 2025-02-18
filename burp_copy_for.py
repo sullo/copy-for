@@ -14,7 +14,7 @@ import re
 
 help = """
 Burp extension: Copy For
-Copyright (c) 2024 Chris Sullo, All Rights Reserved.
+Copyright (c) 2025 Chris Sullo, All Rights Reserved.
 https://github.com/sullo/copy-for
 License: GNU Affero General Public License v3.0
 """
@@ -24,12 +24,12 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
 
     # Modify defaults here if desired
     default_flag_values = {
+        "curl": "curl -X '{method}' {headers} '{url}'",
+        "ffuf": "ffuf -u '{baseurl}/FUZZ' {headers}",
         "jwt_tool": "python3 jwt_tool.py -t '{url}' {headers} -M at",
         "nikto": "nikto.pl -F htm -S . -o . -h '{url}'",
         "nmap": "nmap {hostname} -oA '{filename}' -Pn -p- -sCV",
         "nuclei": "nuclei -u '{baseurl}' -me '{directory}' -H 'User-Agent: {ua}'",
-        "ffuf": "ffuf -u '{baseurl}/FUZZ' {headers}",
-        "curl": "curl -X '{method}' {headers} '{url}'",
         "wget": "wget '{url}' {headers}",
         "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0"
     }
@@ -179,15 +179,17 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
         self.loadSettings()
         callbacks.addSuiteTab(self)
         callbacks.registerContextMenuFactory(self)
-        self.copy_options = sorted([
-            {"name": "Copy for curl", "formatter": self.format_curl},
-            {"name": "Copy for ffuf", "formatter": self.format},
-            {"name": "Copy for jwt_tool.py", "formatter": self.format_jwt_tool},
-            {"name": "Copy for Nikto", "formatter": self.format},
-            {"name": "Copy for Nmap", "formatter": self.format},
-            {"name": "Copy for Nuclei", "formatter": self.format},
-            {"name": "Copy for wget", "formatter": self.format}
-        ], key=lambda x: x["name"])
+        self.copy_options = [
+            {"name": "Copy for curl", "formatter": self.format_curl, "tool": "curl"},
+            {"name": "Copy for ffuf", "formatter": self.format, "tool": "ffuf"},
+            {"name": "Copy for jwt_tool.py", "formatter": self.format_jwt_tool, "tool": "jwt_tool"},
+            {"name": "Copy for Nikto", "formatter": self.format, "tool": "nikto"},
+            {"name": "Copy for Nmap", "formatter": self.format, "tool": "nmap"}, 
+            {"name": "Copy for Nuclei", "formatter": self.format, "tool": "nuclei"},
+            {"name": "Copy for wget", "formatter": self.format, "tool": "wget"}
+        ]
+        # Sort static tools alphabetically by name
+        self.copy_options = sorted(self.copy_options, key=lambda x: x["name"].lower())
 
     # Hanmdler to remove arbitrary menu items
     def remove_dynamic_command(self, row):
@@ -200,7 +202,7 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
 
     # Store values
     def save_flags(self, event):
-        for tool, field in self.flag_fields.items():
+        for tool, field in sorted(self.flag_fields.items(), key=lambda x: x[0]):
             self.flag_values[tool] = field.getText()
         self.saveSettings()
         self.save_dynamic_commands(event)
@@ -208,15 +210,27 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
 
     # Populate the menu
     def createMenuItems(self, invocation):
+        # Combine and sort all items
+        all_items = []
+
+        # Add static tools sorted by name
+        for option in sorted(self.copy_options, key=lambda x: x["name"].lower()):
+            all_items.append((option["name"].lower(), option["name"], 
+                            lambda event, opt=option: self.copy_command(invocation, opt)))
+
+        # Add dynamic commands sorted by label (filter empty first)
+        for dynamic in sorted([d for d in self.dynamic_commands if d["label"].strip()], 
+                            key=lambda x: x["label"].lower()):
+            all_items.append((dynamic["label"].lower(), dynamic["label"],
+                            lambda event, dyn=dynamic: self.copy_dynamic_command(invocation, dyn)))
+
+        # Sort combined list and create menu items
         menu_list = []
-        for option in self.copy_options:
-            menu_item = JMenuItem(option["name"])
-            menu_item.addActionListener(lambda event, opt=option: self.copy_command(invocation, opt))
+        for _, name, action in sorted(all_items, key=lambda x: x[0]):
+            menu_item = JMenuItem(name)
+            menu_item.addActionListener(action)
             menu_list.append(menu_item)
-        for dynamic in self.dynamic_commands:
-            menu_item = JMenuItem(dynamic["label"])
-            menu_item.addActionListener(lambda event, dyn=dynamic: self.copy_dynamic_command(invocation, dyn))
-            menu_list.append(menu_item)
+
         return menu_list if menu_list else None
 
     # Copy to clipboard
@@ -338,7 +352,9 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
 
         dynamic_commands_json = self._callbacks.loadExtensionSetting("dynamic_commands")
         if dynamic_commands_json:
-            self.dynamic_commands = json.loads(dynamic_commands_json)
+            # Filter out any entries with empty labels or commands
+            self.dynamic_commands = [d for d in json.loads(dynamic_commands_json) 
+                                    if d.get("label") and d.get("command")]
             for dynamic in self.dynamic_commands:
                 self.add_dynamic_command()
                 self.dynamic_fields[-1][0].setText(dynamic["label"])
@@ -433,14 +449,16 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
 
     # Save custom items
     def save_dynamic_commands(self, event):
-        self.dynamic_commands = []
+        dynamic_commands = []
         for label_field, command_field in self.dynamic_fields:
-            label = label_field.getText().strip()
+            label = label_field.getText().strip()  # Remove whitespace
             command = command_field.getText().strip()
+            # Only save if BOTH fields have content
             if label and command:
-                self.dynamic_commands.append({"label": label, "command": command})
-        self.saveSettings()
-    
+                dynamic_commands.append({"label": label, "command": command})
+        self.dynamic_commands = dynamic_commands
+        self._callbacks.saveExtensionSetting("dynamic_commands", json.dumps(dynamic_commands))
+
     def copy_command(self, invocation, option):
         # Get the selected HTTP request
         selected_messages = invocation.getSelectedMessages()
