@@ -26,16 +26,16 @@ Commands are defined in the configuration panel. Each tool can be customized and
 
 Variable replacement in the commands works by parsing values from the request and replacing with the ones listed below:
 ```
-{baseurl} - Base URL (protocol and domain)
-{body} - Request body (if present)
-{directory} - Safe directory name based on base URL
-{url} - Full URL
-{filename} - Safe filename based on hostname
-{headers} - Request headers
-{hostname} - Hostname
-{method} - HTTP method
-{port} - Port number (80 or 443 if not specified)
-{ua} - The User-Agent (there is a field to change this)
+{baseurl} - Base URL (protocol , user/pass, port, domain) 
+{body} - Request body (if present) 
+{directory} – Path-safe directory name based on base URL 
+{url} - Full URL 
+{filename} – Path-safe filename based on hostname 
+{headers} - Request headers 
+{hostname} - Hostname header value 
+{method} - HTTP method 
+{port} - Port number 
+{ua} - User Agent (default is Firefox) 
 ```
 
 The default tool configs are:
