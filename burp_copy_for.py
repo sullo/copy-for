@@ -15,6 +15,7 @@ import re
 help = """
 Burp extension: Copy For
 Copyright (c) 2025 Chris Sullo, All Rights Reserved.
+Version: 1.1
 https://github.com/sullo/copy-for
 License: GNU Affero General Public License v3.0
 """
@@ -26,7 +27,7 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
     default_flag_values = {
         "curl": "curl -X '{method}' {headers} '{url}'",
         "ffuf": "ffuf -u '{baseurl}/FUZZ' {headers}",
-        "jwt_tool": "python3 jwt_tool.py -t '{url}' {headers} -M at",
+        "jwt_tool": "python3 jwt_tool.py -t '{url}' {headers} {cookies} -M at",
         "nikto": "nikto.pl -F htm -S . -o . -h '{url}'",
         "nmap": "nmap {hostname} -oA '{filename}' -Pn -p- -sCV",
         "nuclei": "nuclei -u '{baseurl}' -me '{directory}' -H 'User-Agent: {ua}'",
@@ -368,10 +369,35 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
 
     # Custom formatting for JWT Tool
     def format_jwt_tool(self, url, headers, method, body):
-        variables = self.get_common_variables(url, headers, method, body, header_prefix="-rh")
+        cookie_header = next((h for h in headers if h.lower().startswith("cookie:")), None)
+        cookie_flags = ""
+        if cookie_header:
+            cookie_value = cookie_header.split(":", 1)[1].strip()
+            cookies = cookie_value.split("; ")
+            cookie_flags = ' '.join(["-rc '{}'".format(self.escape(cookie)) for cookie in cookies])
+            headers = [h for h in headers if not h.lower().startswith("cookie:")]
+
+        # Create headers string excluding the Cookie header
+        other_headers_str = ' '.join(["-rh '{}'".format(self.escape(header)) for header in headers[1:]]) if headers else ''
+
+        variables = {
+            'url': self.escape(str(url)),
+            'method': method,
+            'body': self.escape(body) if body else '',
+            'cookies': cookie_flags,
+            'headers': other_headers_str
+        }
+
         command = self.format_command(self.flag_values["jwt_tool"], variables)
+        command = command.replace("{headers}", variables['headers'])
+        command = command.replace("{cookies}", variables['cookies'])
+
         if body:
             command += " -pd '{}'".format(variables['body'])
+
+        # Clean up any empty header sections
+        command = command.replace("  ", " ")
+
         return command
 
     # Custom formatting for curl
