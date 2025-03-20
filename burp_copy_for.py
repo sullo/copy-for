@@ -374,20 +374,17 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
         cookie_flags = ""
         if cookie_header:
             cookie_value = cookie_header.split(":", 1)[1].strip()
-            cookies = cookie_value.split("; ")
-            bearer_cookies = [cookie for cookie in cookies if re.search(r'Bearer ', cookie, re.IGNORECASE)]
-            other_cookies = [cookie for cookie in cookies if not re.search(r'Bearer ', cookie, re.IGNORECASE)]
-            ordered_cookies = other_cookies + bearer_cookies  # Ensure Bearer cookies are last
-            cookie_flags = ' '.join(["-rc '{}'".format(self.escape(cookie)) for cookie in ordered_cookies])
+            cookie_value = self.escape(cookie_value.replace('%', '%%'))  # Replace % with %%
+            cookie_flags = "-rc \"{}\"".format(cookie_value)
             headers = [h for h in headers if not h.lower().startswith("cookie:")]
 
         # Create headers string excluding the Cookie header
-        other_headers_str = ' '.join(["-rh '{}'".format(self.escape(header)) for header in headers[1:]]) if headers else ''
+        other_headers_str = ' '.join(["-rh '{}'".format(self.escape(header.replace('%', '%%'))) for header in headers[1:]]) if headers else ''
 
         variables = {
             'url': self.escape(str(url)),
             'method': method,
-            'body': self.escape(body) if body else '',
+            'body': self.escape(body.replace('%', '%%')) if body else '',
             'cookies': cookie_flags,
             'headers': other_headers_str
         }
