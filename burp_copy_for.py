@@ -369,12 +369,16 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
 
     # Custom formatting for JWT Tool
     def format_jwt_tool(self, url, headers, method, body):
+        # Move cookies to -rc flag and other headers to -rh
         cookie_header = next((h for h in headers if h.lower().startswith("cookie:")), None)
         cookie_flags = ""
         if cookie_header:
             cookie_value = cookie_header.split(":", 1)[1].strip()
             cookies = cookie_value.split("; ")
-            cookie_flags = ' '.join(["-rc '{}'".format(self.escape(cookie)) for cookie in cookies])
+            bearer_cookies = [cookie for cookie in cookies if re.search(r'Bearer ', cookie, re.IGNORECASE)]
+            other_cookies = [cookie for cookie in cookies if not re.search(r'Bearer ', cookie, re.IGNORECASE)]
+            ordered_cookies = other_cookies + bearer_cookies  # Ensure Bearer cookies are last
+            cookie_flags = ' '.join(["-rc '{}'".format(self.escape(cookie)) for cookie in ordered_cookies])
             headers = [h for h in headers if not h.lower().startswith("cookie:")]
 
         # Create headers string excluding the Cookie header
@@ -391,7 +395,7 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab, IExtensionStateList
         command = self.format_command(self.flag_values["jwt_tool"], variables)
         command = command.replace("{headers}", variables['headers'])
         command = command.replace("{cookies}", variables['cookies'])
-
+        
         if body:
             command += " -pd '{}'".format(variables['body'])
 
